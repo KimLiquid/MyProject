@@ -1,0 +1,673 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Globalization;
+using System.Net;
+using System.Resources;
+using System.Security.Cryptography.X509Certificates;
+using TMPro;
+using Unity.Mathematics;
+using Unity.VisualScripting;
+//using Unity.VisualScripting;
+//using UnityEditor.Rendering;
+using UnityEngine;
+using static UnityEngine.Rendering.DebugUI;
+//using UnityEngine.InputSystem;
+
+namespace Game
+{
+
+    public class PlayerControler : MonoBehaviour, IControler
+    {
+        /*
+        정의
+       */
+        #region .
+        public enum CameraType { FPSCam, TPSCam };
+
+        [Serializable]
+        public class Components
+        {
+            public Camera tpsCam;
+            public Camera fpsCam;
+
+            [HideInInspector] public Transform tpHig;
+            [HideInInspector] public Transform tpVig;
+            [HideInInspector] public Transform fpHig;
+            [HideInInspector] public Transform fpVig;
+
+            [HideInInspector] public GameObject tpsCamObj;
+            [HideInInspector] public GameObject fpsCamObj;
+
+            [HideInInspector] public SkinnedMeshRenderer mesh;
+            //[HideInInspector] public CapsuleCollider cap;
+            [HideInInspector] public Rigidbody rb;
+            //[HideInInspector] public Animator anim;
+
+            [Range(30f, 240f), Tooltip("게임 프레임")]
+            public int frame = 60;
+        }
+
+        [Serializable]
+        public class KeyOption
+        {
+            public KeyCode moveFwd = KeyCode.W;
+            public KeyCode moveBwd = KeyCode.S;
+            public KeyCode moveLeft = KeyCode.A;
+            public KeyCode moveRight = KeyCode.D;
+            public KeyCode walk = KeyCode.LeftControl;
+            public KeyCode sprint = KeyCode.LeftShift;
+            public KeyCode jump = KeyCode.Space;
+            public KeyCode switchCam = KeyCode.F5;
+            public KeyCode showCursor = KeyCode.LeftAlt;
+            public KeyCode pos = KeyCode.Tab;
+            public KeyCode drawPutMeele = KeyCode.F;
+        }
+
+        [Serializable]
+        public class CamOption
+        {
+            [Tooltip("게임시작 카메라")]
+            public CameraType initCam;
+
+            [Range(1f, 10f), Tooltip("상하/좌우 회전속도")]
+            public float roteSpeed = 2f;
+
+            [Tooltip("카메라 수평 반전여부")]
+            public bool revCamX = false;
+
+            [Tooltip("카메라 수직 반전여부")]
+            public bool revCamY = false;
+
+            [Range(-90f, 0f), Tooltip("올려다보기 제한각도")]
+            public float lookUpDegree = -60f;
+
+            [Range(0f, 75f), Tooltip("내려다보기 제한각도")]
+            public float lookDownDegree = 75f;
+
+            [Range(0f, 3.5f), Tooltip("줌 최대거리")]
+            public float zoomMax = 3f;
+
+            [Range(0f, 5f), Tooltip("줌 최소거리")]
+            public float zoomMin = 3f;
+
+            [Range(1f, 20f), Tooltip("줌 속도")]
+            public float zoomSpeed = 10f;
+
+            [Range(0.01f, 0.5f), Tooltip("줌 가속력")]
+            public float zoomAccel = 0.1f;
+
+            [Range(0f, 1f), Tooltip("액션 시 줌 속도")]
+            public float zoomAction = 0.2f;
+        }
+
+        #region 이전 코드
+        //        [Serializable]
+        //       public class AnimatorOption
+        //       {
+        //           public string paramMoveX = "Move X";
+        //           public string paramMoveZ = "Move Z";
+        //           public string paramDistY = "Dist Y";
+        //           public string paramisGround = "isGround";
+        //           public string paramJump = "Jump";
+        //           public string paramWalk = "Walk";
+        //           public string paramSprint = "Sprint";
+        //           public string paramPos = "Pos";
+        //       }
+        #endregion
+
+        [Serializable]
+        public class PlayerState
+        {
+            public bool isCursorActive; //마우스커서 활성화 상태여부
+            public bool isCurrentFps; //시점 fps 상태 여부
+            public bool isMoving; //움직이고있는가
+            public bool isSprint; //달리고있는가
+            public bool isWalking; //살금살금 걷고있는가
+            public bool isPos; // Pos상태인가
+            public bool isPosTrg; // Pos를 누른 상태인가
+            public bool isPosCam; // Pos를 눌러 카메라 위치가 바뀐 상태인가
+            public bool isParryMotion; //패리 모션 상태인가
+            public bool isMotionActive; // 모션 상태인가
+            public bool isDrawMeele; // 발도 상태인가
+            public CannotAction isCannotAction; // 일부 행동이 불가능한 상태인가
+            #region 이전 코드
+            //public bool isGrounded; //땅에 붙어있는가
+            //public bool isPos; //자세 상태인가
+            //public bool isOnSteepSlope; //등반 불가능한 경사로인가
+            //public bool isForwardBlocked; //전방에 장애물 존재
+            //public bool isOutOfControl; //제어 불가 상태
+            //public bool isJumptTrg; //점프 입력상태
+            //public bool isJump; //점프 상태
+            //public bool isAttackDelay;
+            #endregion
+        }
+
+        [Flags]
+        public enum CannotAction : byte // 일부 불가능한 행동에 대한 열거형
+        {
+            None = 0, // 없음
+            Move = 1 << 0, // 이동
+            Jump = 1 << 1, // 점프
+            Rotate = 1 << 2, // 캐릭터 회전
+            Pos = 1 << 3, // Pos
+            Parry = 1 << 4, // 패리
+            DrawPutMeele = 1 << 5, // 발도/납도
+            Attack = 1 << 6, // 공격
+
+            All = Move | Jump | Rotate | Pos | Parry | DrawPutMeele | Attack
+        }
+        #endregion
+
+        /*
+          필드, 프로퍼티
+        */
+        #region .
+        [SerializeField] private Components _components = new Components();
+        [Space]
+        [SerializeField] private KeyOption _keyOption = new KeyOption();
+        [Space]
+        [SerializeField] private CamOption _camOption = new CamOption();
+        #region 이전 코드
+        //        [Space]
+        //        [SerializeField] private AnimatorOption _animatorOption = new AnimatorOption();
+        #endregion
+        [Space]
+        [SerializeField] private PlayerState _state = new PlayerState();
+
+        public Components Com => _components;
+        public KeyOption Key => _keyOption;
+        public CamOption Cam => _camOption;
+        //        public AnimatorOption Anim => _animatorOption;
+        public PlayerState State => _state;
+
+        private Vector3 _moveDir;
+        private Vector3 _worldMove;
+        private Vector3 _tpsPosCam; //Pos를 사용하기 직전 tps 카메라의 위치;
+        private Vector2 _rotation;
+        #region 이전 코드
+        //private float _groundCheckRadius;
+        //private float _distFromGround;
+        #endregion
+        private float _tpsCamZoomInitDistance; //tps카메라, rig 사이의 초기 거리
+        private float _tpsCamWheelInput = 0; //tps카메라 휠 입력값
+        private float _currentWheel;
+        private float _currentPosDelay; //Pos를 사용한 이후 딜레이 (액션 시 줌 속도를 따라갈것임)
+        private float _deltaTime;
+        #endregion
+
+        /*
+         이벤트 
+        */
+        #region .
+        private void Awake()
+        {
+            InitComponents();
+            InitSettings();
+        }
+        private void Update()
+        {
+            SetValuesByKeyInput();
+            //            UpdateAnimeParams();
+
+            ShowCursorToggle();
+            CameraViewToggle();
+            TPSCamZoom();
+
+            PlayerMove();
+            Rotate();
+
+            SendInterface();
+            UpdateCurrentValues();
+
+            _deltaTime = Time.deltaTime;
+            Application.targetFrameRate = Com.frame;
+        }
+
+        private void UpdateCurrentValues()
+        {
+            if (_currentPosDelay > 0f) //&& !State.isPosCam)
+                _currentPosDelay -= _deltaTime;
+        }
+        #endregion
+
+        /*
+         초기화
+        */
+        #region .
+        private void InitComponents()
+        {
+            LogNotInitComponentError(Com.tpsCam, "TPS Camera");
+            LogNotInitComponentError(Com.fpsCam, "FPS Camera");
+            TryGetComponent(out Com.rb);
+
+            Com.mesh = GetComponentInChildren<SkinnedMeshRenderer>();
+            
+            //Com.anim = GetComponentInChildren<Animator>();
+
+            Com.tpsCamObj = Com.tpsCam.gameObject;
+            Com.tpVig = Com.tpsCam.transform.parent;
+            Com.tpHig = Com.tpVig.parent;
+            Com.fpsCamObj = Com.fpsCam.gameObject;
+            Com.fpVig = Com.fpsCam.transform.parent;
+            Com.fpHig = Com.fpVig.parent;
+        }
+
+        private void InitSettings()
+        {
+            //Rigidbody
+            if (Com.rb)
+            {
+                // 회전은 트랜스폼을 통해 직접 제어할 것이기 때문에 리지드바디 회전은 제한
+                Com.rb.constraints = RigidbodyConstraints.FreezeRotation;
+            }
+
+            //Camera
+            var allCams = FindObjectsOfType<Camera>();
+            foreach (var cam in allCams)
+            {
+                cam.gameObject.SetActive(false);
+            }
+            //설정한 카메라 하나만 활성화
+            State.isCurrentFps = Cam.initCam == CameraType.FPSCam;
+            Com.fpsCamObj.SetActive(State.isCurrentFps);
+            Com.tpsCamObj.SetActive(!State.isCurrentFps);
+
+            #region 이전 코드
+            //TryGetComponent(out CapsuleCollider cCol);
+            //_groundCheckRadius = cCol ? cCol.radius : 0.1f;
+            #endregion
+
+            _tpsCamZoomInitDistance = Vector3.Distance(Com.tpHig.position, Com.tpsCam.transform.position);
+        }
+        #endregion
+
+        /*
+         입력, 1/3인칭 이동,회전
+        */
+        #region .
+        //키보드 입력을 통해 필드 초기화
+        private void SetValuesByKeyInput()
+        {
+            float h = 0f, v = 0f;
+
+            if (Input.GetKey(Key.moveFwd)) v += 1.0f;
+            if (Input.GetKey(Key.moveBwd)) v -= 1.0f;
+            if (Input.GetKey(Key.moveLeft)) h -= 1.0f;
+            if (Input.GetKey(Key.moveRight)) h += 1.0f;
+
+            _moveDir = !State.isCannotAction.HasFlag(CannotAction.Move) ? new Vector3(h, 0f, v).normalized : Vector3.zero; // 캐릭터 이동 방향, 이동 불능 상태일 시 없음
+            _rotation = new Vector2(Input.GetAxisRaw("Mouse X"), -Input.GetAxisRaw("Mouse Y")); //마우스 이동 방향
+
+            _rotation.x = Cam.revCamX ? -_rotation.x : _rotation.x; // 카메라 수평회전 반전 활성화 시 반전
+            _rotation.y = Cam.revCamY ? -_rotation.y : _rotation.y; // 카메라 수직회전 반전 활성화 시 반전
+
+            State.isMoving = _moveDir.sqrMagnitude > 0.01f;
+            State.isSprint = Input.GetKey(Key.sprint);
+            State.isWalking = Input.GetKey(Key.walk);
+            _tpsCamWheelInput = Input.GetAxisRaw("Mouse ScrollWheel");
+            _currentWheel = Mathf.Lerp(_currentWheel, _tpsCamWheelInput, Cam.zoomAccel);
+
+
+        }
+
+        private void Rotate()
+        {
+            Transform verRig, horRig;
+            if (State.isCurrentFps)
+            { //fps회전
+                if (State.isCannotAction.HasFlag(CannotAction.Rotate)) return; // 회전 행동불능일때 fps일 경우엔 카메라 회전을 막음
+                verRig = Com.fpVig;
+                horRig = Com.fpHig;
+            }
+            else
+            { //tps회전
+                verRig = Com.tpVig;
+                horRig = Com.tpHig;
+                RotateFPSRoot();
+            }
+
+            if (State.isCursorActive) return;
+
+            float deltaCoef = _deltaTime * 50f;
+
+            //상하 : 수직 회전
+            float xRotPrev = verRig.localEulerAngles.x; // 이동 이전 카메라의 상하(x좌표) 각도
+            float xRotNext = xRotPrev + _rotation.y * Cam.roteSpeed * deltaCoef; // fps 카메라의 회전 이후 상하(x좌표) 각도
+
+            if (xRotNext > 180f) xRotNext -= 360f;
+
+            //좌우 : 수평 회전
+            float yRotPrev = horRig.localEulerAngles.y; // 이동 이전 fps 카메라의 좌우(y좌표) 각도
+            float yRotNext = yRotPrev + _rotation.x * Cam.roteSpeed * deltaCoef; // fps 카메라의 회전 이후 좌우(y좌표) 각도
+
+            //상하 회전 가능여부
+            bool xRotatable = Cam.lookUpDegree < xRotNext &&
+                               Cam.lookDownDegree > xRotNext;
+
+            //상하 회전 적용
+            verRig.localEulerAngles = Vector3.right * (xRotatable ? xRotNext : xRotPrev);
+
+            //좌우 회전 적용
+            horRig.localEulerAngles = Vector3.up * yRotNext;
+        }
+
+        //3인칭에서 움직일때 캐릭터 회전 적용
+        private void RotateFPSRoot()
+        {
+            if (!State.isMoving || State.isCannotAction.HasFlag(CannotAction.Rotate)) return; //움직이지 않거나 특정 모션상태일시 캐릭터는 회전안함
+
+            Vector3 dir = Com.tpVig.TransformDirection(_moveDir);
+            float currentY = Com.fpHig.localEulerAngles.y;
+            float nextY = Quaternion.LookRotation(dir).eulerAngles.y;
+
+            if (nextY - currentY > 180f) nextY -= 360f;
+            else if (currentY - nextY > 180f) nextY += 360;
+
+            Com.fpHig.eulerAngles = Vector3.up * Mathf.Lerp(currentY, nextY, 0.3f);
+        }
+
+        //캐릭터 이동
+        private void PlayerMove()
+        {
+            //실제 이동 벡터 계산
+            //1인칭(fps)
+            if (State.isCurrentFps)
+                _worldMove = Com.fpHig.TransformDirection(_moveDir);
+            //3인칭(tps)
+            else
+                _worldMove = Com.tpHig.TransformDirection(_moveDir);
+        }
+
+        void IControler.ActionDelay(CannotAction cannotAction)
+        {
+            State.isCannotAction = cannotAction;
+        }
+
+        void IControler.ActionDelay(bool action)
+        {
+            if(action) State.isCannotAction = CannotAction.All;
+            else State.isCannotAction = CannotAction.None;
+        }
+        #endregion
+
+        /*
+         커서 토글 
+        */
+        #region .
+        private void ShowCursorToggle()
+        {
+            if (Input.GetKeyDown(Key.showCursor))
+                State.isCursorActive = !State.isCursorActive;
+
+            ShowCursor(State.isCursorActive);
+        }
+
+        private void ShowCursor(bool value)
+        {
+            Cursor.visible = value;
+            Cursor.lockState = value ? CursorLockMode.None : CursorLockMode.Locked;
+        }
+        #endregion
+
+        /*
+         카메라
+        */
+        #region .
+        private void CameraViewToggle()
+        {
+            if (Input.GetKeyDown(Key.switchCam))
+            {
+                State.isCurrentFps = !State.isCurrentFps;
+                Com.fpsCamObj.SetActive(State.isCurrentFps);
+                Com.tpsCamObj.SetActive(!State.isCurrentFps);
+
+                Transform verRigPrev, horRigPrev, verRigNext, horRigNext;
+
+                //TPS -> FPS
+                if (State.isCurrentFps)
+                {
+                    verRigPrev = Com.tpVig;
+                    verRigNext = Com.fpVig;
+                    horRigPrev = Com.tpHig;
+                    horRigNext = Com.fpHig;
+                    Com.mesh.enabled = false;
+                }
+                //FPS -> TPS
+                else
+                {
+                    verRigPrev = Com.fpVig;
+                    verRigNext = Com.tpVig;
+                    horRigPrev = Com.fpHig;
+                    horRigNext = Com.tpHig;
+                    Com.mesh.enabled = true;
+                }
+                Vector3 tpsAngleV = verRigPrev.localEulerAngles;
+                Vector3 tpsAngleH = horRigPrev.localEulerAngles;
+                verRigNext.localEulerAngles = Vector3.right * tpsAngleV.x;
+                horRigNext.localEulerAngles = Vector3.up * tpsAngleH.y;
+            }
+        }
+
+        private void TPSCamZoom()
+        {
+            Transform tpsCamTr = Com.tpsCam.transform;
+            if (State.isPosCam) return;
+            if (State.isCurrentFps) return; // fps 카메라일경우 반환 (tps 카메라에서만 가능)
+            if (Mathf.Abs(_currentWheel) < 0.01f) return; //휠 입력이 있을때만 가능
+
+            Transform tpsCamRig = Com.tpVig;
+
+            float zoom = _deltaTime * Cam.zoomSpeed;
+            float currentCamToRigDist = Vector3.Distance(tpsCamTr.position, tpsCamRig.position);
+            Vector3 move = Vector3.forward * zoom * _currentWheel * 10f;
+
+            //줌 인
+            if (_currentWheel > 0.01f)
+            {
+                if (_tpsCamZoomInitDistance - currentCamToRigDist < Cam.zoomMax)
+                    tpsCamTr.Translate(move, Space.Self);
+            }
+            else if (_currentWheel < -0.01f)
+            {
+                if (currentCamToRigDist - _tpsCamZoomInitDistance < Cam.zoomMin)
+                    tpsCamTr.Translate(move, Space.Self);
+            }
+            //줌 아웃
+        }
+
+        void IControler.EndPosCam()
+        {
+            Transform tpsCamTr = Com.tpsCam.transform;
+            State.isPosCam = false;
+            _currentPosDelay = Cam.zoomAction;
+
+            //액션을 취한 후 tps 카메라를 다시 원래위치로 돌려놓음
+            StartCoroutine(CamCoroutine(tpsCamTr,new Vector3(0f, 0f, -1.5f), _tpsPosCam, Cam.zoomAction));
+        }
+
+        IEnumerator CamCoroutine(Transform target, Vector3 start, Vector3 end, float duration)
+        {
+            WaitForEndOfFrame wait = new WaitForEndOfFrame();
+            float time = 0;
+
+            while(time < duration) // target가 start에서 end로 duration초에 걸쳐서 이동함
+            {
+                time += _deltaTime;
+                target.localPosition = Vector3.Lerp(start, end, time / duration);
+                yield return wait;
+            }
+
+            target.localPosition = end;
+        }
+
+        #endregion
+
+        /*
+         인터페이스
+        */
+        #region
+
+        private void SendInterface()
+        {
+            IMoveSet moveSet = GetComponent<IMoveSet>();
+            bool isParryAction = false;
+            //State.isGrounded = moveSet.IsGround;
+
+            //이동조작 전송
+            if (State.isMoving && !State.isCannotAction.HasFlag(CannotAction.Move)) // 이동조작 전송, 이동 불가능 상태일시 전송안됨
+            {
+                moveSet.SetMovement(_worldMove, State.isSprint, State.isWalking);
+            }
+            else moveSet.StopMoving(); // 이동하지않거나, 이동불가능 상태일시 멈춤
+
+            moveSet.SendAnimMoveDir(_moveDir,State.isCurrentFps);
+            
+            if (Input.GetKey(Key.jump) && !State.isCannotAction.HasFlag(CannotAction.Jump)) moveSet.SetJump(); // 점프조작 전송, 점프 불가능 상태일시 전송안됨
+
+            if (Input.GetKeyDown(Key.pos) && !State.isDrawMeele) // Pos조작 전송, 발도상태에선 사용불가
+            {
+                if (!State.isPosTrg && _currentPosDelay <= 0 && !State.isCannotAction.HasFlag(CannotAction.Pos)) PlayAction(Action.pos,true);
+                    #region 이전 코드
+                    //State.isPosTrg = true;
+                    //State.isPos = moveSet.SetPos(true);
+                    //if (!State.isPos) State.isPosTrg = false;
+                    //if (State.isPos && State.isPosTrg)
+                    //{
+                    //    State.isMotionActive = true;
+                    //    _tpsPosCam = tpsCamTr.localPosition; // tps 카메라의 기존위치를 다른함수에 기록
+                    //    State.isPosCam = true;
+                    //    _currentPosDelay = Cam.zoomaction;
+
+                    //Pos 상태에 들어갔을때 tps카메라의 위치가 바뀜
+                    //    StartCoroutine(CamCoroutine(tpsCamTr, _tpsPosCam, new Vector3(0f, 0f, -1.5f), Cam.zoomaction));
+                    //}
+                    #endregion
+                else if (State.isPosTrg && _currentPosDelay <= 0) PlayAction(Action.pos,false);
+                    #region 이전 코드
+                    //State.isPosTrg = false;
+                    //State.isPos = moveSet.SetPos(false);
+                    //if (!State.isPos) State.isPosTrg = true;
+                    //if (State.isPos && !State.isPosTrg)
+                    //{
+                    //    State.isMotionActive = false;
+                    //    State.isPosCam = false;
+                    //    _currentPosDelay = Cam.zoomaction;
+
+                    //Pos 상태를 해제했기때문에 tps 카메라를 다시 원래위치로 돌려놓음
+                    //    StartCoroutine(CamCoroutine(tpsCamTr, new Vector3(0f, 0f, -1.5f), _tpsPosCam, Cam.zoomaction));
+                    //}
+                    #endregion
+            } 
+            else if(Input.GetKeyDown(Key.drawPutMeele) && !State.isPosTrg && !State.isCannotAction.HasFlag(CannotAction.DrawPutMeele))
+            {
+                if (!State.isDrawMeele) PlayAction(Action.meele, true);
+                else if (State.isDrawMeele) PlayAction(Action.meele, false);
+                #region 이전 코드
+                    //if (!State.isDrawMeele)
+                    //{
+                    //    State.isDrawMeele = true;
+                    //    bool success = moveSet.SetMeele(true);
+                    //    if (!success) State.isDrawMeele = false;
+                    //    else State.isMotionActive = true;
+                    //}
+                    //else if(State.isDrawMeele)
+                    //{
+                    //    
+                    //    State.isDrawMeele = false;
+                    //    bool success = moveSet.SetMeele(false);
+                    //    if (!success) State.isDrawMeele = true;
+                    //    else State.isMotionActive = true;
+                    //}
+                    //moveSet.StopMoving();
+                    #endregion
+            }
+
+            if(Input.GetMouseButtonDown(0) && State.isDrawMeele && !State.isCannotAction.HasFlag(CannotAction.Attack))
+            {
+                byte atkType = (byte)UnityEngine.Random.Range(1,10);
+                moveSet.MeeleAttack(atkType);
+                State.isCannotAction = CannotAction.All; // 모든 행동 불능
+                //moveSet.ActionDelay(true);
+            }
+
+            //Pos 이후 액션 전송
+            if (State.isPos && State.isPosTrg && Input.GetMouseButtonDown(0)) isParryAction = moveSet.SetPosAtk(0);
+            else if (State.isPos && State.isPosTrg && Input.GetMouseButtonDown(1)) isParryAction = moveSet.SetPosAtk(1);
+            else if (State.isPos && State.isPosTrg && Input.GetMouseButtonDown(2)) isParryAction = moveSet.SetPosAtk(2);
+
+            if (isParryAction) State.isPosTrg = false;
+        }
+
+        private enum Action: byte
+        {
+            pos,
+            meele
+        }
+
+        private void PlayAction(Action type, bool value)
+        {
+            IMoveSet moveSet = GetComponent<IMoveSet>();
+
+            switch(type)
+            {
+                case Action.pos: // Pos상태
+                    Transform tpsCamTr = Com.tpsCam.transform;
+                    // Pos상태를 킬때 value = true , 끌때 value = false
+                    State.isPosTrg = value;
+                    State.isPos = moveSet.SetPos(value);
+                    if (!State.isPos) State.isPosTrg = !value;
+                    if (value)
+                    {
+                        if (State.isPos && State.isPosTrg)
+                        {
+                            State.isCannotAction = CannotAction.All ^ CannotAction.Rotate; // 캐릭터 회전 이외의 행동 불능
+                            _tpsPosCam = tpsCamTr.localPosition; // tps 카메라의 기존위치를 다른함수에 기록
+                            State.isPosCam = value;
+                            //_currentPosDelay = Cam.zoomaction;
+
+                            //Pos 상태에 들어갔을때 tps카메라의 위치가 바뀜
+                            StartCoroutine(CamCoroutine(tpsCamTr, _tpsPosCam, new Vector3(0f, 0f, -1.5f), Cam.zoomAction));
+                        }
+                    }
+                    else
+                    {
+                        if (State.isPos && !State.isPosTrg)
+                        {
+                            State.isCannotAction = CannotAction.Move | CannotAction.Jump; // 이동/점프 행동 불능
+                            State.isPosCam = value;
+                            //_currentPosDelay = Cam.zoomaction;
+
+                            //Pos 상태를 해제했기때문에 tps 카메라를 다시 원래위치로 돌려놓음
+                            StartCoroutine(CamCoroutine(tpsCamTr, new Vector3(0f, 0f, -1.5f), _tpsPosCam, Cam.zoomAction));
+                        }
+                    }
+                    break;
+
+                case Action.meele: // 근접무기 발도/납도
+                    // 발도시 value = true , 납도시 value = false
+                    State.isDrawMeele = value;
+                    bool success = moveSet.SetMeele(value);
+
+                    if (!success) State.isDrawMeele = !value;
+                    else State.isCannotAction = CannotAction.All; // 모든 행동 불능
+                    break;
+            }
+        }
+
+        #endregion
+
+
+        /*
+         오류 감지
+        */
+        #region .
+        private void LogNotInitComponentError<T>(T component, string componentName) where T : Component
+        {
+            if (component == null)
+                Debug.LogError($"{componentName} 컴포넌트를 인스펙터에 넣어주세요!");
+        }
+        #endregion
+    }
+
+}

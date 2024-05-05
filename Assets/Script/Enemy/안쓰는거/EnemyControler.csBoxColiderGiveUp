@@ -1,0 +1,634 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+//using System.Diagnostics;
+using Unity.VisualScripting.Antlr3.Runtime.Misc;
+using static Game.Definition;
+using UnityEngine;
+using System.Net.WebSockets;
+using Unity.VisualScripting;
+using UnityEngine.InputSystem.Controls;
+using UnityEngine.Animations;
+using System.Runtime.InteropServices;
+using Unity.Mathematics;
+
+namespace Game
+{
+    [RequireComponent(typeof(EnemyMoveSet))]
+    public class EnemyControler : MonoBehaviour, IEnemy
+    {
+        public enum AggroType : byte
+        {
+            [Tooltip("공격 안함")]
+            friendly = 0,
+
+            [Tooltip("비선공")]
+            neutrality = 1,
+
+            [Tooltip("선공")]
+            hostility = 2
+        }
+
+        [Serializable]
+        public class Components
+        {
+            public Transform enemyRoot;
+
+            /*[HideInInspector] *//*public Rigidbody rb;*/
+            /*[HideInInspector] *//* public MeshCollider col; */
+            /*[HideInInspector] */public SphereCollider targetDetectCol;
+            /*[HideInInspector] */public Transform target;
+            /*[HideInInspector] *//*public Transform meshCenter;*/
+
+            [HideInInspector] public WaitForSeconds waitPatrol;
+            [HideInInspector] public WaitForSeconds waitGroggy;
+        }
+
+        [Serializable]
+        public class EnemyStats
+        {
+            [Tooltip("최대 체력")]
+            public float maxHealth;
+
+            [Tooltip("최대 스테미나")]
+            public float maxStamina;
+
+            [Tooltip("공격력")]
+            public float attackDamage;
+
+            [Tooltip("방어력")]
+            public float defense;
+
+            [Tooltip("속도")]
+            public float speed;
+
+            [Tooltip("그로기 지속시간")]
+            public float groggyTime;
+
+            [Tooltip("어그로 범위")]
+            public float aggroRange;
+
+            [Tooltip("다음 순찰 선회 쿨타임")]
+            public float patrolCooldown;
+
+            [Tooltip("순찰 선회 시간")]
+            public float patrolRotateTime = 1;
+
+            [Range(0, 100), Tooltip("순찰 이동 없이 돌아보기만 할 확률 (백분율)")]
+            public float patrolDontMovePercent = 50;
+
+            [Min(0.001f), Tooltip("순찰 지속 시간 (최솟값)")]
+            public float patrolMoveTimeMin = 5;
+
+            [Min(0.001f), Tooltip("순찰 지속 시간 (최댓값)")]
+            public float patrolMoveTimeMax = 10;
+
+            [Tooltip("어그로 타입 (공격안함, 비선공, 선공")]
+            public AggroType aggroType;
+        }
+
+        [Serializable]
+        public class EnemyState
+        {
+            public float health; // 체력
+            public float stamina; // 스테미나
+            public bool isAggro; // 어그로 상태
+            public bool isGroggy; // 그로기 상태
+
+            public bool isTargetFound; // 적을 찾았는가
+
+            public bool isMoving; // 이동중인가
+
+            //public bool isForwardBlocked; // 앞이 막혀있는가
+            //public bool isGrounded; // 지면에 닿아있는가
+
+            //public bool isOnSteepSlope;
+        }
+
+        [Serializable]
+        public class EnemyValue
+        {
+            public Vector3 moveDir; // 로컬 이동방향
+            public Vector3 worldMoveDir; // 글로벌 이동방향
+
+            public float patrolDuration; // 순찰 지속시간
+
+            #region .
+        //    public Vector3 moveDir; // ??? ????
+
+        //    public Vector3 meshCenter; // ??? ????????? ???
+        //    public Vector3 meshExtend; // ??? ????????? ??????
+
+        //    public Vector3 worldMeshCenter; // ????????????? ??? ????????? ???
+
+        //    public Vector3 groundNormal;
+        //    public float groundSlopeAngle;
+        //    public float forwardSlopeAngle;
+        //    public float groundDist;
+            #endregion
+        }
+
+        #region .
+        //[Serializable]
+        //public class EnemyDebug
+        //{
+        //    public bool hasDetectForward;
+        //    public bool hasDetectGround;
+
+        //    public RaycastHit forwardHit;
+        //    public RaycastHit groundHit;
+
+        //    public Color forwardDebugColor/* { get; }*/ = new Color(0, 0, 1, 0.5f);
+        //    public Color groundDebugColor/* { get; }*/ = new Color(0, 1, 0, 0.5f);
+
+        //    public Color detectForwardDebugColor/* { get; }*/ = new Color(1, 0, 1, 0.5f);
+        //    public Color detectGroundDebugColor/* { get; }*/ = new Color(1, 1, 0, 0.5f);
+        //}
+        #endregion
+
+        [SerializeField] private Components _components = new();
+        //[SerializeField] private CheckOption _checkOption = new();
+        [SerializeField] private EnemyStats _enemyStats = new();
+        [SerializeField] private EnemyState _enemyState = new();
+        [SerializeField] private EnemyValue _enemyValue = new();
+        //[SerializeField] private EnemyDebug _enemyDebug = new();
+
+        private Components Com => _components;
+        //private CheckOption Check => _checkOption;
+        private EnemyStats Stats => _enemyStats;
+        private EnemyState State => _enemyState;
+        private EnemyValue Value => _enemyValue;
+        //private EnemyDebug EDebug => _enemyDebug;
+
+        //private Coroutine _moveCoroutine;
+        private readonly WaitForFixedUpdate _waitFixedUpdate = new();
+        private readonly WaitForEndOfFrame _waitFrame = new();
+
+        private float _deltaTime;
+
+        // public Vector3 MoveDir
+        // {
+        //     get { return Vector3.zero; }
+        //     set
+        //     {
+        //         MoveSet.SetMovement(value);
+        //         transform.rotation = Quaternion.LookRotation(value);
+        //     }
+        // }
+
+        //private Vector3 _meshCenter; // ??? ????????? ???
+        //private Vector3 _meshExtend; // ??? ????????? ??????
+        //private Vector3 _meshScaledExtend; // ??? ????????? ???? ????? ??????
+        //private float _meshFwdExtend; // ??? ????????? ???? ????????? ????
+        //private float _meshDownExtend; // ??? ????????? ???? ????????? ????
+
+        //private Color _debugRed = new Color(1, 0, 0, 0.5f);
+        //private Color _debugGreen = new Color(0, 1, 0, 0.5f);
+        //private Color _debugBlue = new Color(0, 0, 1, 0.5f);
+
+        //private RaycastHit _hit;
+
+        private IEnemyMoveSet MoveSet => GetComponent<IEnemyMoveSet>();
+
+        public void Awake()
+        {
+            InitComponents();
+            //InitMeshPoint();
+            InitState();
+            MoveRoutine();
+        }
+
+        public void Start()
+        {
+            InitColider();
+        }
+
+        public void Update()
+        {
+            EnemyMove();
+            _deltaTime = Time.deltaTime;
+        }
+
+        private void InitComponents()
+        {
+            //TryGetComponent(out Com.rb);
+            //if(Com.rb == null) Com.rb = gameObject.AddComponent<Rigidbody>();
+            TryGetComponent(out Com.targetDetectCol);
+            if(Com.targetDetectCol == null) Com.targetDetectCol = gameObject.AddComponent<SphereCollider>();
+            /* TryGetComponent(out Com.col);
+            if(Com.col == null) Com.col = gameObject.AddComponent<MeshCollider>(); */
+
+            //Com.meshCenter = transform.GetChildByName("MeshCenter");
+            foreach(Transform child in transform)
+            {
+                if(child.CompareTag("Root"))
+                {
+                    Com.enemyRoot = child;
+                    break;
+                } 
+            }
+            // MoveSet.GetEnemyRoot(Com.enemyRoot);
+            Com.target = GameObject.FindGameObjectWithTag("CamControler").transform;
+            Com.waitPatrol = new(Stats.patrolCooldown);
+            Com.waitGroggy = new(Stats.groggyTime);
+
+            //Com.rb.constraints = RigidbodyConstraints.FreezeRotation;
+            //Com.rb.interpolation = RigidbodyInterpolation.Interpolate;
+            //Com.rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
+            //Com.rb.useGravity = false;
+        }
+
+        #region .
+        //private void InitMeshPoint()
+        //{
+        //    /*???????? ??? ?????? ???? x,y,z?? ??????? ????
+        //    float maxPosX = 0;
+        //    float maxPosY = 0;
+        //    float maxPosZ = 0;
+        //    Vector3 boundCenter = new();
+
+        //    float maxPosX = 0;
+        //    float maxPosY = 0;
+        //    float maxPosZ = 0;
+
+        //    float minPosX = 0;
+        //    float minPosY = 0;
+        //    float minPosZ = 0;
+
+        //    Vector3 minMeshPoint = new();
+        //    Vector3 maxMeshPoint = new();*/
+        //    #region .
+        //    ////kinnedMeshRenderer ???
+        //    //var smrArr = GetComponentsInChildren<SkinnedMeshRenderer>();
+        //    //if (smrArr.Length > 0)
+        //    //{
+        //    //    bool oneArr = true;
+        //    //    foreach (var smr in smrArr)
+        //    //    {
+        //    //        if (oneArr)
+        //    //        {
+        //    //            _meshCenter = transform.InverseTransformPoint(smr.bounds.center);
+        //    //            //_meshCenter = smr.sharedMesh.bounds.center;
+        //    //            _meshExtend = smr.sharedMesh.bounds.extents;
+        //    //            oneArr = false;
+        //    //        }
+
+        //    //        //_meshCenter = (_meshCenter + smr.sharedMesh.bounds.center) * 0.5f;
+        //    //        _meshExtend = smr.sharedMesh.bounds.extents;
+        //    //        /*foreach (var vertex in smr.sharedMesh.vertices)
+        //    //        {
+        //    //            if (maxPosX < vertex.x)
+        //    //                maxPosX = vertex.x;
+
+        //    //            if (minPosX > vertex.x)
+        //    //                minPosX = vertex.x;
+
+        //    //            if (maxPosY < vertex.y)
+        //    //                maxPosY = vertex.y;
+
+        //    //            if (minPosY > vertex.y)
+        //    //                minPosY = vertex.y;
+
+        //    //            if (maxPosZ < vertex.z)
+        //    //                maxPosZ = vertex.z;
+
+        //    //            if (minPosZ > vertex.z)
+        //    //                minPosZ = vertex.z;
+        //    //        }*/
+        //    //    }
+        //    //}
+        //    //else //MeshFilter ???
+        //    //{
+        //    //    var mfArr = GetComponentsInChildren<MeshFilter>();
+        //    //    if (mfArr.Length > 0)
+        //    //    {
+        //    //        bool oneArr = true;
+        //    //        foreach (var mf in mfArr)
+        //    //        {
+        //    //            if (oneArr)
+        //    //            {
+        //    //                _meshCenter = mf.mesh.bounds.center;
+        //    //                _meshExtend = mf.sharedMesh.bounds.extents;
+        //    //                oneArr = false;
+        //    //            }
+
+        //    //            _meshCenter = (_meshCenter + mf.sharedMesh.bounds.center) * 0.5f;
+        //    //            _meshExtend = mf.sharedMesh.bounds.extents;
+        //    //            /*foreach (var vertex in mf.mesh.vertices)
+        //    //            {
+        //    //                if (maxPosX < vertex.x)
+        //    //                    maxPosX = vertex.x;
+
+        //    //                if (minPosX > vertex.x)
+        //    //                    minPosX = vertex.x;
+
+        //    //                if (maxPosY < vertex.y)
+        //    //                    maxPosY = vertex.y;
+
+        //    //                if (minPosY > vertex.y)
+        //    //                    minPosY = vertex.y;
+
+        //    //                if (maxPosZ < vertex.z)
+        //    //                    maxPosZ = vertex.z;
+
+        //    //                if (minPosZ > vertex.z)
+        //    //                    minPosZ = vertex.z;
+        //    //            }*/
+        //    //        }
+        //    //    }
+        //    //}
+        //    #endregion
+        //    /*_meshCenter = ( (Vector3.right * maxPosX) + (Vector3.up * maxPosY) + (Vector3.forward * maxPosZ) ) * 0.5f;
+        //    Com.meshCenter.localPosition = _meshCenter;
+        //    _meshExtend = new Vector3(maxPosX, maxPosY, maxPosZ);
+        //    Value.topCenterPoint = transform.TransformDirection(transform.position.x, maxTop, transform.position.z);
+        //    Value.forwardCenterPoint = transform.TransformDirection(transform.position.x, transform.position.y, maxForward);
+        //    _meshCenter = new Vector3((maxPosX + minPosX) * 0.5f, (maxPosY + minPosY) * 0.5f, (maxPosZ + minPosZ) * 0.5f);
+        //    _meshExtend = new Vector3(1, 1, 1); */
+        //    var rArr = GetComponentsInChildren<Renderer>();
+        //    if (rArr.Length > 0)
+        //    {
+        //        Quaternion currentRotation = transform.rotation;
+        //        Vector3 currentScale = transform.localScale;
+        //        transform.rotation = Quaternion.Euler(Vector3.zero);
+        //        transform.localScale = Vector3.one;
+        //        Bounds sumBounds = rArr[0].bounds/*new(transform.position, Vector3.zero)*/;
+
+        //        foreach (var r in rArr)
+        //        {
+        //            sumBounds.Encapsulate(r.bounds);
+        //            /*_meshCenter = transform.InverseTransformPoint(r.bounds.center);
+        //            _meshExtend = r.bounds.extents;*/
+        //        }
+        //        /*_meshCenter = transform.InverseTransformPoint(sumBounds.center);
+        //        _meshExtend = sumBounds.extents;*/
+        //        Value.meshCenter = sumBounds.center - transform.position;
+        //        Value.meshExtend = sumBounds.extents;
+
+        //        transform.rotation = currentRotation;
+        //        transform.localScale = currentScale;
+
+        //        /*_meshFwdExtend = sumBounds.size;*//*Mathf.Abs(transform.InverseTransformPoint(sumBounds.max).z) + Mathf.Abs(transform.InverseTransformPoint(sumBounds.center).z)*/;
+        //        //_meshDownExtend = Mathf.Abs(sumBounds.max.y - sumBounds.center.y);
+        //    }
+        //    Value.worldMeshCenter = transform.TransformPoint(Value.meshCenter);
+
+        //    Com.meshCenter.localPosition = Value.meshCenter;
+        //    Com.targetDetectCol.center = Value.meshCenter;
+
+        //    _meshScaledExtend = Vector3.Scale(Value.meshExtend, transform.localScale);
+        //    _meshFwdExtend = _meshScaledExtend.z;
+        //    _meshDownExtend = _meshScaledExtend.y;
+        //    /*Com.testCol = gameObject.AddComponent<BoxCollider>();
+        //    Com.testCol.center = _meshCenter;
+        //    Com.testCol.size = _meshSize;*/
+        //}
+        #endregion
+        private void InitState()
+        {
+            State.health = Stats.maxHealth;
+            State.stamina = Stats.maxStamina;
+
+            Com.targetDetectCol.radius = Stats.aggroRange;
+
+            MoveSet.SetMovementSpeed(Stats.speed);
+        }
+
+        private void InitColider()
+        {
+            Com.targetDetectCol.center = MoveSet.DetectColCenter();
+            Com.targetDetectCol.isTrigger = true;
+        }
+
+        private void MoveRoutine()
+        {
+            
+            StartCoroutine(PatrolMove()); // 순찰
+        }
+
+        private IEnumerator PatrolMove()
+        {
+            while(true)
+            {
+                Value.moveDir = FindNewPoint(); // 이동 방향 지정
+                CalculateMoveDir();
+                yield return StartCoroutine(PatrolRotateCoroutine()); // 이동 방향으로 선회가 끝날때까지 대기 후 이동
+                for (float time = 0; time < Value.patrolDuration; time += _deltaTime)
+                { // 이후  순찰 지속시간이 끝나거나
+                    if(MoveSet.IsUnableMove()) // 이동이 불가능할때까지 이동방향으로 직진
+                        break;
+                    yield return _waitFixedUpdate;
+                }
+                MoveSet.StopMoving(); // 앞이 막히면 정지 후
+                State.isMoving = false;
+                yield return Com.waitPatrol; // 다음 순찰시간까지 대기
+            }
+        }
+
+        private IEnumerator PatrolRotateCoroutine()
+        {        
+            float prevY = Com.enemyRoot.localEulerAngles.y;  //현재 방향
+            float nextY = Quaternion.LookRotation(Value.worldMoveDir).eulerAngles.y; //지정된 방향
+
+            if (nextY - prevY > 180f) nextY -= 360;
+            else if (prevY - nextY > 180f) nextY += 360;
+
+            // float roteProcess = 0;
+            for(float roteProcess = 0; roteProcess < Stats.patrolRotateTime; roteProcess += _deltaTime)
+            // while(roteProcess < Stats.patrolRotateTime)
+            {
+                // roteProcess += _deltaTime;
+                Com.enemyRoot.localEulerAngles = Vector3.up * Mathf.Lerp(prevY, nextY, roteProcess / Stats.patrolRotateTime);
+                yield return _waitFrame;
+            } // Stats.patrolRotateTime 에 걸쳐 현재 방향에서 지정된 방향으로 선회시킴
+            Com.enemyRoot.localEulerAngles = Vector3.up * nextY; 
+
+            // 방향지정이 끝나면 순찰 지속시간을 정하고
+            float randomPercent = UnityEngine.Random.Range(0f, 100f);
+            Value.patrolDuration = 
+                randomPercent <= Stats.patrolDontMovePercent
+                && Stats.patrolDontMovePercent != 0 ?   // 추가적으로 움직이지 않을 확률이 존재함
+                0 : UnityEngine.Random.Range(Stats.patrolMoveTimeMin, Stats.patrolMoveTimeMax);
+            State.isMoving = true; // 이동을 시작함
+        }
+        
+        private Vector3 FindNewPoint()
+        {
+            float nextAngle = UnityEngine.Random.Range(0, 360) * Mathf.Rad2Deg;
+            return new Vector3(Mathf.Sin(nextAngle), 0f, Mathf.Cos(nextAngle)).normalized;
+        }
+
+        /*IEnumerator EnemyMove()
+        {
+            yield return _waitFixedUpdate;
+        }*/
+
+        Transform IEnemy.GetEnemyRoot() => Com.enemyRoot;
+
+        void IEnemy.UpdateHealth(float damage)
+        {
+            State.health -= damage;
+            if (State.health <= 0)
+            {
+
+            }
+        }
+
+        void IEnemy.UpdateStamina(float damage)
+        {
+            State.stamina -= damage;
+            if (State.stamina <= 0)
+            {
+                StartCoroutine(StaminaZero());
+            }
+        }
+
+        IEnumerator StaminaZero()
+        {
+            State.isGroggy = true;
+            yield return Com.waitGroggy;
+            State.isGroggy = false;
+        }
+
+        //private void OnDrawGizmos()
+        //{
+        //    if (EDebug.hasDetectForward)
+        //    {
+        //        Gizmos.color = EDebug.detectForwardDebugColor;
+        //        Gizmos.DrawRay(Value.worldMeshCenter, Value.moveDir * EDebug.forwardHit.distance);
+        //        Gizmos.matrix = Matrix4x4.TRS(Value.worldMeshCenter + Value.moveDir * EDebug.forwardHit.distance, transform.rotation, transform.lossyScale);
+        //        Gizmos.DrawCube(Vector3.zero, Value.meshExtend * 2);
+        //    }
+        //    else
+        //    {
+        //        Gizmos.color = EDebug.forwardDebugColor;
+        //        Gizmos.DrawRay(Value.worldMeshCenter, Value.moveDir * (_meshFwdExtend + Check.forwardCheckDist));
+        //    }
+
+        //    if (EDebug.hasDetectGround)
+        //    {
+        //        Gizmos.color = EDebug.detectGroundDebugColor;
+        //        Gizmos.DrawRay(Value.worldMeshCenter, Vector3.down * /*Mathf.Max(*/EDebug.groundHit.distance/* - Check.groundCheckThreshold, 0f)*/);
+        //        Gizmos.matrix = Matrix4x4.TRS(Value.worldMeshCenter + Vector3.down * EDebug.groundHit.distance, transform.rotation, transform.lossyScale);
+        //        Gizmos.DrawCube(Vector3.zero, Value.meshExtend * 2);
+        //    }
+        //    else
+        //    {
+        //        //Gizmos.matrix = Matrix4x4.TRS(Value.worldMeshCenter, transform.rotation, transform.lossyScale);
+        //        //Gizmos.matrix = Matrix4x4.Rotate(transform.rotation);
+        //        Gizmos.color = EDebug.groundDebugColor;
+        //        Gizmos.DrawRay(Value.worldMeshCenter, Vector3.down * (_meshDownExtend + Check.groundCheckDist));
+        //    }
+        //}
+
+        //private void UpdateValue()
+        //{
+        //    Value.worldMeshCenter = transform.TransformPoint(Value.meshCenter);
+        //}
+
+        //private void CheckGround()
+        //{
+        //    PublicCurrentValue.groundDist = float.MaxValue;
+        //    Value.groundNormal = Vector3.up;
+        //    Value.groundSlopeAngle = 0f;
+        //    Value.forwardSlopeAngle = 0f;
+
+        //    bool cast = Physics.BoxCast(Value.worldMeshCenter, _meshScaledExtend, Vector3.down, out var hit,
+        //        transform.rotation, /*_meshDownExtend + */Check.groundCheckDist, -1, QueryTriggerInteraction.Ignore);
+
+        //    State.isGrounded = false;
+        //    if (cast)
+        //    {
+        //        EDebug.groundHit = hit;
+        //        EDebug.hasDetectGround = true;
+
+        //        //???? ?????? ????
+        //        Value.groundNormal = hit.normal;
+
+        //        //???? ????? ?????? ??? ?????(?? ??????? ????)
+        //        Value.groundSlopeAngle = Vector3.Angle(Value.groundNormal, Vector3.up);
+        //        Value.forwardSlopeAngle = Vector3.Angle(Value.groundNormal, Value.moveDir) - 90f;
+
+        //        State.isOnSteepSlope = Value.groundSlopeAngle >= Check.maxSlopeAngle;
+
+        //        Value.groundDist = Mathf.Max(hit.distance /*- _capRadiusDiff*/ - Check.groundCheckThreshold, 0f);
+
+        //        State.isGrounded = (Value.groundDist <= 0.0001f) && !State.isOnSteepSlope;
+        //    } else EDebug.hasDetectGround = false;
+        //}
+
+        //private void CheckForward()
+        //{
+        //    bool cast = Physics.BoxCast(Value.worldMeshCenter, _meshScaledExtend, Value.moveDir, out var hit,
+        //        transform.rotation, _meshFwdExtend + Check.forwardCheckDist, -1, QueryTriggerInteraction.Ignore);
+
+        //    State.isForwardBlocked = false;
+        //    if (cast)
+        //    {
+        //        EDebug.forwardHit = hit;
+        //        EDebug.hasDetectForward = true;
+
+        //        float forwardObstacleAngle = Vector3.Angle(hit.normal, Vector3.up);
+        //        State.isForwardBlocked = forwardObstacleAngle >= Check.maxSlopeAngle;
+        //    } else EDebug.hasDetectForward = false;
+
+        //    //UnityEngine.Debug.DrawRay(_meshCenter, Vector3.forward/*Value.moveDir*/ * hit.distance);
+        //    //UnityEngine.Debug.Dra(_meshCenter + Vector3.forward/*Value.moveDir*/ * hit.distance, _meshExtend);
+        //}
+
+        /*void OnDrawGizmos()
+        {
+            Gizmos.color = Color.blue;
+            Gizmos.DrawRay(_meshCenter, Vector3.forward * (_meshFwdExtend + Check.forwardCheckDist));
+            Gizmos.color = Color.red;
+            Gizmos.DrawWireCube(_meshCenter + Vector3.forward * _hit.distance, _meshScaledExtend * 2f);
+        }*/
+
+        private void OnTriggerEnter(Collider other)
+        {
+            if (Stats.aggroType.HasFlag(AggroType.hostility) && other.transform == Com.target)
+            {
+                State.isAggro = true;
+                DetectAggroRange();
+            }
+        }
+
+        private void DetectAggroRange()
+        {
+            StopCoroutine(PatrolMove()); // 적을 발견시 순찰 중지
+        }
+
+        private void OnTriggerExit(Collider other)
+        {
+            if (other.transform == Com.target)
+            {
+                State.isAggro = false;
+            }
+        }
+
+        private void CalculateMoveDir()
+        {
+            Value.worldMoveDir = transform.TransformDirection(Value.moveDir);
+        }
+
+        private void EnemyMove()
+        {
+            if(!State.isMoving) return;
+            CalculateMoveDir();
+            ApplyRotate();
+            MoveSet.SetMovement(Value.worldMoveDir);
+            
+        }
+
+        private void ApplyRotate()
+        {
+            float currentY = Com.enemyRoot.localEulerAngles.y;
+            float nextY = Quaternion.LookRotation(Value.worldMoveDir).eulerAngles.y;
+
+            if (nextY - currentY > 180f) nextY -= 360;
+            else if (currentY - nextY > 180f) nextY += 360;
+
+            Com.enemyRoot.localEulerAngles = Vector3.up * Mathf.Lerp(currentY, nextY, 0.3f);
+        }
+    }
+}
