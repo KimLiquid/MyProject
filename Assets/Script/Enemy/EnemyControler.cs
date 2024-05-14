@@ -122,11 +122,17 @@ namespace Game
             [Min(0.001f), Tooltip("순찰 지속 시간 (최댓값)")]
             public float patrolMoveTimeMax = 10f;
 
-            [Range(1f, 3f), Tooltip("추격 시 늘어나는 범위 계수")]
+            [Range(1f, 3f), Tooltip("추격 시 늘어나는 감지 범위 계수")]
             public float chaseRangeCoef = 1.5f;
 
             [Min(0f), Tooltip("추격 시 이동속도 배율")]
             public float chaseMovementMultiply = 1.25f;
+
+            [Min(0f), Tooltip("추격 시 장애물 감지 거리")]
+            public float chaseForwardCheckDist = 10f;
+
+            [Range(0f, 180f), Tooltip("앞에 장애물이 있을 시 우회 검사 각도 간격")]
+            public float chaseAvoidAngleInterV = 15f;
 
             [Min(0.001f), Tooltip("타겟을 놓쳤을 때 멈춰있는 시간 (최솟값)")]
             public float targetMissTimeMin = 0.5f;
@@ -222,6 +228,10 @@ namespace Game
         private readonly Vector3 _notReadyCenterValue = new Vector3(13579.13579f, 13579.13579f, 13579.13579f);
 
         private Transform _debugVar;
+
+        private Vector3 _chaseAvoidDir;
+
+        private bool _isChaseForwardBlocked;
 
         // public Vector3 MoveDir
         // {
@@ -612,15 +622,26 @@ namespace Game
         {
             Com.targetDetectCol.radius = Stats.senseRange * Option.chaseRangeCoef; // 추격 시작 전 기척 감지범위를 지정한 배율만큼 늘림 (*= Stats.chaseRangeCoef)
             MoveSet.SetMovementSpeed(Stats.speed * Option.chaseMovementMultiply); // 그리고 이동속도를 지정한 배율만큼 변경함
+            /* Value.targetDir = Com.target.TransformPoint(Com.targetCol.center) - Com.targetDetectEye.TransformPoint(Com.targetDetectCol.center); // 타겟과 이어지는 벡터를 갱신
+            Value.worldMoveDir = Value.targetDir.normalized; // 이동방향을 타겟쪽으로 설정 */
             while(Value.targetDir.magnitude <= Com.targetDetectCol.radius) // 타겟과 이어진 길이가 늘어난 기척감지범위보다 길어질때까지 반복
             {
                 if(!EDebug.isDontControl)
                 {
-                    Value.targetDir = Com.target.TransformPoint(Com.targetCol.center) - Com.targetDetectEye.TransformPoint(Com.targetDetectCol.center); // 지속적으로 타겟과 이어지는 선을 갱신함
-                    Value.worldMoveDir = Value.targetDir.normalized; // 일단 타겟쪽으로 이동
+                    Value.targetDir = Com.target.TransformPoint(Com.targetCol.center) - Com.targetDetectEye.TransformPoint(Com.targetDetectCol.center); // 타겟과 이어지는 벡터를 갱신
+                    Value.worldMoveDir = Value.targetDir.normalized; // 이동방향을 타겟쪽으로 설정
+                    (_isChaseForwardBlocked, _chaseAvoidDir) = MoveSet.IsChaseCheckForward(Option.chaseForwardCheckDist, Option.chaseAvoidAngleInterV); // 전방 장애물 검사
+                    while(_isChaseForwardBlocked) // 전방에 장애물이 없을때 까지 반복
+                    {
+                        Value.targetDir = Com.target.TransformPoint(Com.targetCol.center) - Com.targetDetectEye.TransformPoint(Com.targetDetectCol.center); // 타겟과 이어지는 벡터를 지속적으로 갱신하고
+                        Value.worldMoveDir = _chaseAvoidDir; // 이동방향을 우회로로 설정
+                        _isChaseForwardBlocked = MoveSet.IsAvoidCheckForward(Option.chaseForwardCheckDist, Value.targetDir); // 타겟 방향의 장애물 검사
+                        yield return _waitFixedUpdate;
+                    }
                     State.isMoving = true;
+                    yield return _waitFixedUpdate;
                 }
-                yield return _waitFixedUpdate;
+                
             }
             MoveSet.StopMoving(); // 타겟과 이어진 길이가 늘어난 기척감지범위보다 길어지면 정지 후
             State.isMoving = false;

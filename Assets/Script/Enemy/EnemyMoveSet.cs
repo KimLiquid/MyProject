@@ -51,6 +51,7 @@ namespace Game
 
             public RaycastHit forwardHit; // 정면 레이케스트
             public RaycastHit groundHit; // 지면 레이케스트
+            public RaycastHit chaseForwardHit; // 추격시 정면 레이케스트
 
             public Vector3 groundNormal;
             public Vector3 groundCross;
@@ -58,6 +59,7 @@ namespace Game
             public float forwardSlopeAngle;
             public float slopeAccel;
             public float groundDist;
+            public Vector3 chaseAvoidDir;
 
             public float gravity;
             public Vector3 hVelocity;
@@ -70,6 +72,8 @@ namespace Game
 
             public bool isForwardBlocked; // 앞 길이 막혀있는가
             public bool isGrounded; // 공중에 떠있는가
+
+            public bool isChaseForwardBlocked; // 추격하는 경로에 막고있는 물체가 있는가
 
             public bool isOnSteepSlope; // 등반 불가능한 경사로인가
         }
@@ -138,9 +142,11 @@ namespace Game
         /* private Transform[] _debugVar = new Transform[10];
         private bool[] _debugVarBool = new bool[10]; */
 
+        private float _checkAngle;
         private readonly Vector3 _notReadyCenterValue = new Vector3(13579.13579f, 13579.13579f, 13579.13579f);
         private float _fixedDeltaTime;
         private bool _initColiderReady = false;
+        /* private float _checkAngleInterVRad; */
 
         private IEnemy Control => GetComponent<IEnemy>();
 
@@ -452,6 +458,108 @@ namespace Game
 
         bool IEnemyMoveSet.IsUnableMove() => State.isForwardBlocked || (State.isForwardBlocked && !State.isGrounded);
 
+        (bool isChaseForwardBlocked, Vector3 chaseAvoidDir) IEnemyMoveSet.IsChaseCheckForward(float chaseForwardCheckDist, float chaseAvoidAngleInterV)
+        {   
+            bool cast = 
+                #region ChaseCheckForwardCast
+                Physics.CapsuleCast(
+                    point1: CapBottomCenterPoint,
+                    point2: CapTopCenterPoint,
+                    radius: Value.castRadius,
+                    direction: Value.worldMoveDir + Vector3.down * 0.1f,
+                    hitInfo: out Value.chaseForwardHit,
+                    maxDistance: chaseForwardCheckDist,
+                    layerMask: (-1) - (1 << LayerMask.NameToLayer("Player")), // 장애물 탐지대상에서 플레이어는 제외함
+                    QueryTriggerInteraction.Ignore);
+                #endregion
+
+            State.isChaseForwardBlocked = false;
+
+            if (cast)
+            {   
+                
+                float forwardObstacleAngle = Vector3.Angle(Value.chaseForwardHit.normal, Vector3.up);
+                if (forwardObstacleAngle >= Check.maxSlopeAngle)
+                {
+                    State.isChaseForwardBlocked = true;
+                    /* _checkAngleInterVRad = Mathf.Cos(chaseAvoidAngleInterV * Mathf.Deg2Rad * 0.5f); */
+                    for(_checkAngle = chaseAvoidAngleInterV;
+                        _checkAngle < 180;
+                        _checkAngle = _checkAngle + chaseAvoidAngleInterV >= 180 ? 180 : _checkAngle + chaseAvoidAngleInterV)
+                    {
+                        bool rightCast =
+                            #region ChaseAvoidCastRight
+                            Physics.CapsuleCast(
+                                point1: CapBottomCenterPoint,
+                                point2: CapTopCenterPoint,
+                                radius: Value.castRadius,
+                                direction: (Quaternion.Euler(0, _checkAngle, 0) * Value.worldMoveDir) + Vector3.down * 0.1f,
+                                hitInfo: out var rightHit,
+                                maxDistance: chaseForwardCheckDist,
+                                layerMask: (-1) - (1 << LayerMask.NameToLayer("Player")), // 장애물 탐지대상에서 플레이어는 제외함
+                                QueryTriggerInteraction.Ignore);
+                            #endregion
+                        UnityEngine.Debug.Log(Quaternion.Euler(0, _checkAngle, 0) * Value.worldMoveDir);
+                        UnityEngine.Debug.DrawRay(Vector3.Lerp(CapTopCenterPoint, CapBottomCenterPoint, 0.5f), (Quaternion.Euler(0, _checkAngle, 0) * Value.worldMoveDir), Color.cyan);
+                        float rightObstacleAngle = Vector3.Angle(rightHit.normal, Vector3.up);
+                        if(rightObstacleAngle < Check.maxSlopeAngle || !rightCast)
+                        {
+                            Value.chaseAvoidDir = Quaternion.Euler(0, _checkAngle, 0) * Value.worldMoveDir;
+                            UnityEngine.Debug.Log("aaaaa");
+                            break;
+                        }
+                        
+                        bool leftCast =
+                            #region ChaseAvoidCastLeft
+                            Physics.CapsuleCast(
+                                point1: CapBottomCenterPoint,
+                                point2: CapTopCenterPoint,
+                                radius: Value.castRadius,
+                                direction: (Quaternion.Euler(0, -_checkAngle, 0) * Value.worldMoveDir) + Vector3.down * 0.1f,
+                                hitInfo: out var leftHit,
+                                maxDistance: chaseForwardCheckDist,
+                                layerMask: (-1) - (1 << LayerMask.NameToLayer("Player")), // 장애물 탐지대상에서 플레이어는 제외함
+                                QueryTriggerInteraction.Ignore);
+                            #endregion
+                        UnityEngine.Debug.Log(Quaternion.Euler(0, -_checkAngle, 0) * Value.worldMoveDir);
+                        UnityEngine.Debug.DrawRay(Vector3.Lerp(CapTopCenterPoint, CapBottomCenterPoint, 0.5f), (Quaternion.Euler(0, -_checkAngle, 0) * Value.worldMoveDir), Color.cyan);
+                        float leftObstacleAngle = Vector3.Angle(leftHit.normal, Vector3.up);
+                        if(leftObstacleAngle < Check.maxSlopeAngle || !leftCast)
+                        {
+                            Value.chaseAvoidDir = Quaternion.Euler(0, -_checkAngle, 0) * Value.worldMoveDir;
+                            UnityEngine.Debug.Log("bbbbbb");
+                            break;
+                        }
+
+                        if(_checkAngle == 180) Value.chaseAvoidDir = Quaternion.Euler(0, 180, 0) * Value.worldMoveDir;
+                    }
+                }
+            }
+            return (State.isChaseForwardBlocked, Value.chaseAvoidDir);
+        }
+
+        bool IEnemyMoveSet.IsAvoidCheckForward(float chaseForwardCheckDist, in Vector3 targetDir)
+        {
+            bool cast = 
+                #region AvoidCheckTargetCast
+                Physics.CapsuleCast(
+                    point1: CapBottomCenterPoint,
+                    point2: CapTopCenterPoint,
+                    radius: Value.castRadius,
+                    direction: targetDir + Vector3.down * 0.1f,
+                    hitInfo: out var hit,
+                    maxDistance: chaseForwardCheckDist,
+                    layerMask: (-1) - (1 << LayerMask.NameToLayer("Player")), // 장애물 탐지대상에서 플레이어는 제외함
+                    QueryTriggerInteraction.Ignore);
+                #endregion
+
+            if(cast)
+            {
+                float obstacleAngle = Vector3.Angle(hit.normal, Vector3.up);
+                return obstacleAngle >= Check.maxSlopeAngle;
+            }
+            return false;
+        }
         private void OnDrawGizmos()
         {
             if (!EDebug.isDrawGizmos || !_initColiderReady) return; //디버그 기즈모 표기를 꺼놨거나 collide 준비가 덜 된 경우 표시안함

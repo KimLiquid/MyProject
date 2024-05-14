@@ -21,5 +21,8 @@ namespace Game
         /* (bool cast, RaycastHit hit) CheckObstacle(in Vector3 dir, float maxDistance); */ // 타겟과의 방향, 최대 감지범위를 가져와 감지여부, 감지한오브젝트정보를 리턴
 
         bool IsUnableMove(); // 이동 불가능 상태 리턴
+        (bool isChaseForwardBlocked, Vector3 chaseAvoidDir) IsChaseCheckForward(float chaseForwardCheckDist, float chaseAvoidAngleInterV); // 장애물 감지 상태 리턴
+
+        bool IsAvoidCheckForward(float chaseForwardCheckDist, in Vector3 targetDir); // 장애물 회피
     }
 }
