@@ -23,6 +23,9 @@
 ![Unity_2024-05-15_18-36-38](https://github.com/KimLiquid/MyProject/assets/114733076/d18a5553-de2a-4301-afc7-c1a4a7582ae7)
 
 ## 스크립트 기능 설명
+> [!IMPORTANT]
+> ![msedge_2024-05-17_23-01-28](https://github.com/KimLiquid/MyProject/assets/114733076/9c1ea486-3058-4afe-9452-59a22e26c698)
+> <br>움짤이 안보일수도 있는데 기다리다보면 나옴
 
 ### Player쪽 기능
 ![Unity_2024-05-15_22-25-56](https://github.com/KimLiquid/MyProject/assets/114733076/e4fa73c0-1da0-4661-9fb1-7550c88a66e4)
@@ -115,6 +118,6 @@
 ![msedge_2024-05-16_15-07-50](https://github.com/KimLiquid/MyProject/assets/114733076/2c698450-34ba-4220-ae77-3cea13078fdf)
 <br>카운터나 검/총 공격 등등에 이펙트를 넣을려고했지만 하필 HDRP로 프로젝트를 시작해서 그런지 에셋스토어 등에서 가져온 공격용 이펙트가 싹다 안보이거나 깨져서 여기저기서 방법 찾아보기도하고 아예 이펙트를 이쁘게 만드는방법까지 찾아보기도했다가 그냥 이후에 적들 스크립트 좀 재대로 만들어지고 좀 틀이 재대로 잡힐때 넣기로 함
 
-<br>적의 타겟(플레이어)을 찾은 이후의 추적은 A* 길찾기 알고리즘을 사용할려고했으나 맵이 평평하지않고 경사져있기때문에
+<br>적의 타겟(플레이어)을 찾은 이후의 추적은 A* 길찾기 알고리즘을 학습하고 사용할려고했으나 맵이 평평하지않고 경사져있기때문에
 <br>![msedge_2024-05-17_22-18-34](https://github.com/KimLiquid/MyProject/assets/114733076/e3b3437c-6087-47e2-873e-df38b2943582)
-<br>[이와 같이](https://stonemonarch.com/2016/05/30/3d-pathfinding-in-unity-for-procedural-environments/) 그리드를 만들려고 찾아보는데 영 안보여서 일단은 간단하게 앞에 장애물이 있을 때 만 우회하는식으로 추격하도록 만들었음
+<br>[이것 처럼](https://stonemonarch.com/2016/05/30/3d-pathfinding-in-unity-for-procedural-environments/) 그리드를 직접 만들려고 찾아보는데 영 안보여서 일단은 간단하게 앞에 장애물이 있을 때 만 우회하는식으로 추격하도록 만들었음
