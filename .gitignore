@@ -91,3 +91,5 @@ crashlytics-build.properties
 /[Aa]ssets/Scenes.meta
 /[Aa]ssets/Scenes/*
 
+.필요없는파일/
+.배포용/

@@ -103,6 +103,19 @@
 ## 개발 여담
 <br>이 프로젝트는 22년 10~11월 이후 쯤 부터 만들기 시작해서 진짜 가아끔씩 깨작깨작 만들다가 작년쯤 부터 약간 더 집중해서 만들기 시작함
 <br>그리고 프로젝트를 시작할때부터 최대한 에셋 스토어에 있는 다른 기능성 에셋을 쓰지않는걸 목적으로 만들기 시작함
+
+<br>![Taskmgr_2023-08-23_21-53-42](https://github.com/KimLiquid/MyProject/assets/114733076/42d4b9f6-1af1-4f3e-b700-1f859de782d5)
+![Taskmgr_2023-08-24_22-12-14](https://github.com/KimLiquid/MyProject/assets/114733076/240b0488-f918-424c-ae79-f48958baa7a7)
+![Taskmgr_2023-08-30_21-22-55](https://github.com/KimLiquid/MyProject/assets/114733076/177e908e-e306-41df-a223-32439c508d9e)
+![Taskmgr_2023-08-30_21-29-01](https://github.com/KimLiquid/MyProject/assets/114733076/ce5a1b47-6534-40c3-bc70-235be36a9b0d)
+![Taskmgr_2023-09-05_17-56-56](https://github.com/KimLiquid/MyProject/assets/114733076/e5268667-da07-4a3f-94a8-4d36dae32984)
+<br>스크립트는 여태 Visual Studio 2022 로 만들고있다가 쓰다보니 AnyCPU가 메모리를 엄청 잡아먹어서 렉이 걸리는것도 있고 AnyCPU를 닫아놓으면
+<br>![devenv_2023-08-30_21-23-26](https://github.com/KimLiquid/MyProject/assets/114733076/94494b98-6d4e-4924-b62c-a78afd717727)
+![devenv_2023-08-30_21-24-35](https://github.com/KimLiquid/MyProject/assets/114733076/d88716a9-0202-41f3-87d7-0fb985e5c7f9)
+<br>위와 같이 함수 위에 참조표기가 사라지는데다가 닫아놔도 꽤 무거워서
+<br>![Code_2024-05-20_22-09-04](https://github.com/KimLiquid/MyProject/assets/114733076/190668da-50cf-4bf9-bd5e-aafd97267852)
+<br>몇달 전에 Visual Studio Code로 갈아 탐. 사용해보니까 확실히 가벼움
+
 <br>맨 처음 플레이어 카메라/이동 스크립트를 만들때는 [이걸 토대로](https://rito15.github.io/posts/unity-fps-tps-character/) 만들기 시작함
 <br>아무튼 기본적인 이동 스크립트를 만든 이후 카운터 자세/카운터 기능 -> 발도/납도/검 공격 기능 -> 총 꺼내기/집어넣기/공격 기능 -> 구르기 기능 순서로 그냥 생각나는대로 추가 기능을 만듦
 <br>아직 모든공격에 공격판정이 없는것은 적은 이후에 만들고있는중이라 적들 스크립트좀 재대로 만들어지면 이후에 넣을예정
@@ -118,6 +131,13 @@
 ![msedge_2024-05-16_15-07-50](https://github.com/KimLiquid/MyProject/assets/114733076/2c698450-34ba-4220-ae77-3cea13078fdf)
 <br>카운터나 검/총 공격 등등에 이펙트를 넣을려고했지만 HDRP로 프로젝트를 시작해서 그런지 에셋스토어 등에서 가져온 공격용 이펙트가 싹다 안보이거나 깨져서 여기저기서 방법 찾아보기도하고 아예 이펙트를 이쁘게 만드는방법까지 찾아보기도했다가 그냥 이후에 적들 스크립트 좀 재대로 만들어지고 좀 틀이 재대로 잡힐때 넣기로 함
 
+![Unity_2024-05-20_23-23-30](https://github.com/KimLiquid/MyProject/assets/114733076/f9a41737-dd72-4822-8805-fb69d4c407ad)
+<br>MeshRenderer의 꼭짓점들을 통해서 또는 bounds 를 구해서 충돌 판정용 캡슐콜라이더/박스콜라이더를 만들었는데 박스 크기가 너무 크게만들어지거나 그런식으로 만들어져서 애좀 많이 먹다가 
+<br>어찌저찌 Matrix4x4.TRS 를 이용해서 외형과 똑같이 재대로 먹도록 만들어봤는데
+<br>박스콜라이더 기준으론 지금 이동시스템에 적합하지 못한것 같아서(계속 중력값만 늘어나고, 적이 이동을 안함) 일단은 박스콜라이더를 안쓰고 캡슐콜라이더만 쓰도록 타협을 봄
+
+![Unity_2024-04-15_23-19-54](https://github.com/KimLiquid/MyProject/assets/114733076/9aad880b-a879-46ef-8a48-a2ce959de7f7)
 <br>적의 타겟(플레이어)을 찾은 이후의 추적은 navmesh를 아예 안쓰고 A* 길찾기 알고리즘을 학습하고 사용할려고했으나 맵이 평평하지않고 경사져있기때문에
 <br>![msedge_2024-05-17_22-18-34](https://github.com/KimLiquid/MyProject/assets/114733076/e3b3437c-6087-47e2-873e-df38b2943582)
 <br>[이것 처럼](https://stonemonarch.com/2016/05/30/3d-pathfinding-in-unity-for-procedural-environments/) 그리드를 직접 만들려고 찾아보는데 영 안보여서 일단은 간단하게 앞에 장애물이 있을 때 만 우회하는식으로 추격하도록 만들었음
+<br>거미는 높이가 낮아서 반지름을 0.2f 로 해놓으니 캡슐콜라이더인데도 동그랗게 만들어져서그런지 이후 타겟을 추격하는부분에서 앞에 장애물을 거의 전혀 회피 못하고있음

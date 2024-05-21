@@ -499,13 +499,11 @@ namespace Game
                                 layerMask: (-1) - (1 << LayerMask.NameToLayer("Player")), // 장애물 탐지대상에서 플레이어는 제외함
                                 QueryTriggerInteraction.Ignore);
                             #endregion
-                        UnityEngine.Debug.Log(Quaternion.Euler(0, _checkAngle, 0) * Value.worldMoveDir);
                         UnityEngine.Debug.DrawRay(Vector3.Lerp(CapTopCenterPoint, CapBottomCenterPoint, 0.5f), (Quaternion.Euler(0, _checkAngle, 0) * Value.worldMoveDir), Color.cyan);
                         float rightObstacleAngle = Vector3.Angle(rightHit.normal, Vector3.up);
                         if(rightObstacleAngle < Check.maxSlopeAngle || !rightCast)
                         {
                             Value.chaseAvoidDir = Quaternion.Euler(0, _checkAngle, 0) * Value.worldMoveDir;
-                            UnityEngine.Debug.Log("aaaaa");
                             break;
                         }
                         
@@ -521,13 +519,11 @@ namespace Game
                                 layerMask: (-1) - (1 << LayerMask.NameToLayer("Player")), // 장애물 탐지대상에서 플레이어는 제외함
                                 QueryTriggerInteraction.Ignore);
                             #endregion
-                        UnityEngine.Debug.Log(Quaternion.Euler(0, -_checkAngle, 0) * Value.worldMoveDir);
                         UnityEngine.Debug.DrawRay(Vector3.Lerp(CapTopCenterPoint, CapBottomCenterPoint, 0.5f), (Quaternion.Euler(0, -_checkAngle, 0) * Value.worldMoveDir), Color.cyan);
                         float leftObstacleAngle = Vector3.Angle(leftHit.normal, Vector3.up);
                         if(leftObstacleAngle < Check.maxSlopeAngle || !leftCast)
                         {
                             Value.chaseAvoidDir = Quaternion.Euler(0, -_checkAngle, 0) * Value.worldMoveDir;
-                            UnityEngine.Debug.Log("bbbbbb");
                             break;
                         }
 
