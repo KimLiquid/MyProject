@@ -141,3 +141,9 @@
 <br>![msedge_2024-05-17_22-18-34](https://github.com/KimLiquid/MyProject/assets/114733076/e3b3437c-6087-47e2-873e-df38b2943582)
 <br>[이것 처럼](https://stonemonarch.com/2016/05/30/3d-pathfinding-in-unity-for-procedural-environments/) 그리드를 직접 만들려고 찾아보는데 영 안보여서 일단은 간단하게 앞에 장애물이 있을 때 만 우회하는식으로 추격하도록 만들었음
 <br>거미는 높이가 낮아서 반지름을 0.2f 로 해놓으니 캡슐콜라이더인데도 동그랗게 만들어져서그런지 이후 타겟을 추격하는부분에서 앞에 장애물을 거의 전혀 회피 못하고있음
+
+## 프로젝트 다운로드
+
+### [Azure DevOps 에서 다운로드 ( 다운속도 느림 )](https://dev.azure.com/KimLiquid/_git/MyProjectDownload?anchor=%ED%94%84%EB%A1%9C%EC%A0%9D%ED%8A%B8-%EB%8B%A4%EC%9A%B4%EB%A1%9C%EB%93%9C%EC%9A%A9)
+
+### [Google Drive 에서 다운로드 (README.md가 재대로 안보임)](https://drive.google.com/drive/folders/1zqpczYS_aKwro7mVOkdYAEtULA_FcLNe)
