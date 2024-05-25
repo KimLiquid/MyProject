@@ -147,3 +147,32 @@
 ### [Azure DevOps 에서 다운로드 ( 다운속도 느림 )](https://dev.azure.com/KimLiquid/_git/MyProjectDownload?anchor=%ED%94%84%EB%A1%9C%EC%A0%9D%ED%8A%B8-%EB%8B%A4%EC%9A%B4%EB%A1%9C%EB%93%9C%EC%9A%A9)
 
 ### [Google Drive 에서 다운로드 (README.md가 재대로 안보임)](https://drive.google.com/drive/folders/1zqpczYS_aKwro7mVOkdYAEtULA_FcLNe)
+
+### 임포트 하는방법
+
+![msedge_2024-05-21_21-52-41](https://github.com/KimLiquid/MyProject/assets/114733076/35b642f1-b37f-4dd2-bf1b-105c53438992)
+<br>🔼 Azure DevOps 에서 다운받을 경우
+<br>
+<br>![msedge_2024-05-25_13-06-39](https://github.com/KimLiquid/MyProject/assets/114733076/b58da7d8-55da-44f0-a539-dce2fdac24f4)
+<br>🔼 Google Drive 에서 다운받을 경우
+
+<br>일단 위 사진들 처럼 ExportMyProject.unitypackage 를 다운로드
+
+![Unity_Hub_2024-05-21_23-08-07](https://github.com/KimLiquid/MyProject/assets/114733076/34bc4822-49fa-4009-bd0c-b662a5b1c0e3)
+<br>High Definition 3D 템플릿으로 프로젝트 새로 생성
+<br>**(에디터 버전 2022.3.22f1 권장)**
+
+![Unity_2024-05-21_22-36-35](https://github.com/KimLiquid/MyProject/assets/114733076/70d7e6be-6893-4503-bb5b-54ae1737ffe4)
+<br>이후 다운받은 ExportMyProject.unitypackage 를 사진처럼 프로젝트에 드레그하거나 
+<br>ExportEyProject.unitypackage 를 프로젝트 안에 넣고 실행  
+
+![Unity_2024-05-21_22-26-29](https://github.com/KimLiquid/MyProject/assets/114733076/b2eeef12-9f89-49e0-b521-e13e56eb029f)
+<br>![Unity_2024-05-21_22-28-36](https://github.com/KimLiquid/MyProject/assets/114733076/0a71cebf-1e18-4074-99db-43a5f0169a57)
+<br>![Unity_2024-05-21_22-28-50](https://github.com/KimLiquid/MyProject/assets/114733076/ee20197e-1dc2-43e5-972d-6cac47406fc4)
+<br>위에 사진과 같이 임포트
+
+![Unity_2024-05-21_23-15-49](https://github.com/KimLiquid/MyProject/assets/114733076/eed0643a-f3fa-446a-8646-4f1ff6a1d802)
+<br>임포트 완료 시 Assets/Scenes 안에 Field를 실행 (기존 기본씬은 닫기)
+
+![Unity_2024-05-21_19-50-45](https://github.com/KimLiquid/MyProject/assets/114733076/7bb6f28c-fd65-4a96-9335-dda2e2712dd7)
+<br>ExportMyProject.unitypackage 를 임포트 했으면 아마 시작 시 윗 사진처럼 2개의 스크립트가 없다고 나올텐데 ProBuilder로 만든거라 그냥 무시하시면 됌
